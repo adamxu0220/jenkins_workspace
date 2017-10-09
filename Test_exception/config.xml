@@ -1,0 +1,39 @@
+<?xml version='1.0' encoding='UTF-8'?>
+<flow-definition plugin="workflow-job@2.14.1">
+  <actions/>
+  <description></description>
+  <keepDependencies>false</keepDependencies>
+  <properties>
+    <org.jenkinsci.plugins.workflow.job.properties.PipelineTriggersJobProperty>
+      <triggers/>
+    </org.jenkinsci.plugins.workflow.job.properties.PipelineTriggersJobProperty>
+  </properties>
+  <definition class="org.jenkinsci.plugins.workflow.cps.CpsFlowDefinition" plugin="workflow-cps@2.40">
+    <script>env.BUILD_URL = BUILD_URL
+node(&apos;master&apos;){
+    stage(&quot;step-1&quot;){
+        echo &quot;step-1&quot;   
+    }
+    
+    try {
+        stage(&quot;step-2&quot;){
+            sh &quot;make ad&quot;
+            sh &quot;exit -1&quot;
+            
+        }
+    }
+    catch (err){
+        echo &quot;exception in step-2&quot;
+    }
+    echo env.BUILD_URL
+    
+    stage(&quot;step-3&quot;){
+        echo BUILD_URL
+        echo &quot;step-3&quot;
+    }
+}</script>
+    <sandbox>true</sandbox>
+  </definition>
+  <triggers/>
+  <disabled>false</disabled>
+</flow-definition>

@@ -1,0 +1,44 @@
+<?xml version='1.0' encoding='UTF-8'?>
+<flow-definition plugin="workflow-job@2.14.1">
+  <actions/>
+  <description></description>
+  <keepDependencies>false</keepDependencies>
+  <properties>
+    <org.jenkinsci.plugins.workflow.job.properties.PipelineTriggersJobProperty>
+      <triggers/>
+    </org.jenkinsci.plugins.workflow.job.properties.PipelineTriggersJobProperty>
+  </properties>
+  <definition class="org.jenkinsci.plugins.workflow.cps.CpsFlowDefinition" plugin="workflow-cps@2.40">
+    <script>node(&apos;build_server01&apos;) {
+
+    def res_stage_get_pure_sourcecode = true
+    def res_stage_get_CL = true
+    def res_stage_build = true
+    checkout([$class: &apos;GitSCM&apos;, branches: [[name: &apos;*/master&apos;]], doGenerateSubmoduleConfigurations: false, extensions: [], submoduleCfg: [], userRemoteConfigs
+: [[url: &apos;ssh://haizhou@116.62.23.172:29418/auto_test&apos;]]])
+    def common_api = load &apos;pipeline/common_api.groovy&apos;
+    def git_func = load &apos;pipeline/git_func.groovy&apos;
+
+
+    try {
+        stage(&apos;get_CL&apos;){
+            if (res_stage_get_pure_sourcecode) {
+                git_func.cherry_pick(GERRIT_HOST, GERRIT_PORT, GERRIT_PROJECT, GERRIT_REFSPEC, (GERRIT_PROJECT.equals(&quot;nuttx_apps&quot;) ? &quot;apps&quot;:GERRIT_PROJECT))
+            }
+        }
+    }
+    catch (exc) {
+        //echo exc
+        echo exc.getMessage()
+        for (def line_stack :exc.getStackTrace()){
+            echo line_stack.toString()
+        }
+        exc.printStackTrace()
+        res_stage_get_CL = false
+    }
+}</script>
+    <sandbox>false</sandbox>
+  </definition>
+  <triggers/>
+  <disabled>false</disabled>
+</flow-definition>

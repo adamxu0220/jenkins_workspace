@@ -1,0 +1,201 @@
+<?xml version='1.0' encoding='UTF-8'?>
+<flow-definition plugin="workflow-job@2.14.1">
+  <actions/>
+  <description></description>
+  <keepDependencies>false</keepDependencies>
+  <properties>
+    <hudson.model.ParametersDefinitionProperty>
+      <parameterDefinitions>
+        <GerritCLPicker.GerritCLPicker.GerritCLPicker plugin="GerritCLPicker@1.0">
+          <name>CLSets</name>
+          <queryString>status:open     (project:nuttx OR nuttx_apps)</queryString>
+          <selectedServer>Aliyun-gerrit-server</selectedServer>
+          <owner></owner>
+          <branch></branch>
+          <project>nuttx;nuttx_apps</project>
+          <changeIDs></changeIDs>
+          <allPatchSets>false</allPatchSets>
+        </GerritCLPicker.GerritCLPicker.GerritCLPicker>
+      </parameterDefinitions>
+    </hudson.model.ParametersDefinitionProperty>
+    <org.jenkinsci.plugins.workflow.job.properties.PipelineTriggersJobProperty>
+      <triggers/>
+    </org.jenkinsci.plugins.workflow.job.properties.PipelineTriggersJobProperty>
+  </properties>
+  <definition class="org.jenkinsci.plugins.workflow.cps.CpsFlowDefinition" plugin="workflow-cps@2.40">
+    <script>import groovy.json.JsonSlurper
+
+def cherry_pick(GERRIT_HOST, GERRIT_PORT, GERRIT_PROJECT, GERRIT_REFSPEC){
+    env.GERRIT_REFSPEC=GERRIT_REFSPEC
+    env.GERRIT_PROJECT=GERRIT_PROJECT
+    if (GERRIT_PROJECT.equals(&quot;nuttx&quot;)){
+        sh &apos;&apos;&apos;
+        pwd
+        cd nuttx
+        git fetch ssh://haizhou@&quot;${GERRIT_HOST}&quot;:&quot;${GERRIT_PORT}&quot;/&quot;${GERRIT_PROJECT}&quot; &quot;${GERRIT_REFSPEC}&quot; &amp;&amp; git cherry-pick FETCH_HEAD
+        cd ../
+        &apos;&apos;&apos;
+    }
+    if (GERRIT_PROJECT.equals(&quot;nuttx_app&quot;)){
+        sh &apos;&apos;&apos;
+        pwd
+        cd apps
+        git fetch ssh://haizhou@&quot;${GERRIT_HOST}&quot;:&quot;${GERRIT_PORT}&quot;/&quot;${GERRIT_PROJECT}&quot; &quot;${GERRIT_REFSPEC}&quot; &amp;&amp; git cherry-pick FETCH_HEAD
+        cd ../
+        &apos;&apos;&apos;
+    }
+    
+}
+def gerrit_review(GERRIT_EVENT_TYPE, GERRIT_HOST, GERRIT_CHANGE_NUMBER, GERRIT_PATCHSET_NUMBER, result){
+    def review_result
+    def reivew_msg
+    if (GERRIT_EVENT_TYPE.equals(&quot;change-merged&quot;)){
+        if (result){
+            review_result=&apos;+2&apos;
+        }
+        else {
+            review_result=&apos;-2&apos;
+        }
+    }
+    else {
+        if (result) {
+            review_result=&apos;+1&apos;
+        }
+        else {
+            review_result=&apos;-1&apos;
+        }
+    }
+    if (result){
+        reivew_msg = &quot;Auto-Build-Passed:&quot;
+    }
+    else {
+        reivew_msg = &quot;Auto-Build-Failed:&quot;
+    }
+    env.GERRIT_EVENT_TYPE = GERRIT_EVENT_TYPE
+    env.GERRIT_CHANGE_NUMBER = GERRIT_CHANGE_NUMBER
+    env.GERRIT_PATCHSET_NUMBER = GERRIT_PATCHSET_NUMBER
+    env.review_result = review_result
+    env.review_msg = review_msg
+    sh &apos;&apos;&apos;
+        ssh -p 29418 -i ~/sh-gerrit-build-reviewer sh-gerrit-build-reviewer@&quot;${GERRIT_HOST}&quot;  gerrit review &quot;${GERRIT_CHANGE_NUMBER}&quot;,&quot;${GERRIT_PATCHSET_NUMBER}&quot;  --code-review &quot;${review_result}&quot; -m &quot;${review_msg}&quot;
+    &apos;&apos;&apos;
+}
+
+def get_pure_sourcecode() {
+        sh &apos;&apos;&apos;
+            pwd
+            if [ ! -d &quot;nuttx&quot; ]; then
+                git clone ssh://haizhou@&quot;${GERRIT_HOST}&quot;:&quot;${GERRIT_PORT}&quot;/nuttx
+            fi
+            if [ ! -d &quot;apps&quot; ]; then
+                git clone ssh://haizhou@&quot;${GERRIT_HOST}&quot;:&quot;${GERRIT_PORT}&quot;/nuttx_apps apps
+            fi
+            cd nuttx
+            git reset --hard origin/zdk
+            git checkout zdk
+            git pull
+            cd ../apps
+            git reset --hard origin/zdk
+            git checkout zdk
+            git pull
+            cd ..
+            
+        &apos;&apos;&apos;
+}
+
+def Build(){
+    sh &apos;&apos;&apos;
+        pwd
+        cd apps
+        git checkout zdk
+        cd ../nuttx
+        git checkout zdk
+        git branch
+        
+        cd configs/nrf52832_dk
+        make hello -j32
+        make clean -j32
+        make ble_hello -j32
+        make clean -j32
+        make ble_app_uart -j32
+        make clean -j32
+        make nsh -j32 
+        make clean -j32
+    &apos;&apos;&apos;
+}
+node(&apos;build_server01&apos;) {
+    
+    def jsonSlurper = new JsonSlurper()
+    def object = jsonSlurper.parseText(CLSets)
+    def total_num = object.total
+    def GERRIT_HOST_list = object.GERRIT_HOST
+    def GERRIT_PORT_list = object.GERRIT_PORT
+    
+    def GERRIT_CHANGE_OWNER_EMAIL_list = object.GERRIT_CHANGE_OWNER_EMAIL
+    def GERRIT_REFSPEC_list = object.GERRIT_REFSPEC
+    def GERRIT_PATCHSET_NUMBER_list = object.GERRIT_PATCHSET_NUMBER
+    def GERRIT_CHANGE_NUMBER_list = object.GERRIT_CHANGE_NUMBER
+    def GERRIT_PROJECT_list = object.GERRIT_PROJECT
+    def GERRIT_EVENT_TYPE_list = object.GERRIT_EVENT_TYPE
+    
+    
+    
+    def GERRIT_HOST=GERRIT_HOST_list.get(0)
+    def GERRIT_PORT=GERRIT_PORT_list.get(0)
+    
+    def res_stage_get_pure_sourcecode = true
+    def res_stage_get_CL = true
+    def res_stage_build = true
+    
+    jsonSlurper=null
+    object=null
+    
+    
+    env.GERRIT_PORT=GERRIT_PORT
+    env.GERRIT_HOST=GERRIT_HOST
+    
+    try {
+        stage(&apos;get_pure_sourcecode&apos;){
+            get_pure_sourcecode()
+        }
+    }
+    catch (exc) {
+            res_stage_get_pure_sourcecode = false   
+    }
+   
+    try {
+        stage(&apos;get_CL&apos;){
+            if (res_stage_get_pure_sourcecode) {
+                for (int idx=0; idx&lt;total_num; idx++){
+                    cherry_pick(GERRIT_HOST, GERRIT_PORT, GERRIT_PROJECT_list.get(idx), GERRIT_REFSPEC_list.get(idx))
+                }
+            }
+        }
+    }
+    catch (exc) {
+        res_stage_get_CL = false   
+    }    
+   
+    try {
+        stage(&apos;Build&apos;){
+            if (res_stage_get_pure_sourcecode &amp;&amp; res_stage_get_CL){
+                Build()
+            }
+        }
+    }
+    catch (exc) {
+        res_stage_build = false   
+    }
+    
+    
+    stage(&apos;GerritReviewer&apos;){
+        for (int idx=0; idx&lt;total_num; idx++){
+            gerrit_review(&quot;change-merged&quot;, GERRIT_HOST, GERRIT_CHANGE_NUMBER_list.get(idx), GERRIT_PATCHSET_NUMBER_list.get(idx), res_stage_get_pure_sourcecode &amp;&amp; res_stage_get_CL &amp;&amp; res_stage_build)
+        }
+    }
+}</script>
+    <sandbox>true</sandbox>
+  </definition>
+  <triggers/>
+  <disabled>false</disabled>
+</flow-definition>
